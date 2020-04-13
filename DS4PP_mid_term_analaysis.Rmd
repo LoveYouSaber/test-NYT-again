@@ -1,0 +1,822 @@
+---
+title: "NYT March 2018 comment analysis"
+author: "Louis"
+date: "3/10/2020"
+output: html_document
+---
+
+The data used for this analysis came from a New York Times articles and comments database at https://www.kaggle.com/aashita/nyt-comments. The datasets for articles and comments for March 2018 were downloaded. 
+
+There were initially 1,385 articles and 246,915 comments in those datasets.
+
+The analysis overall sought to answer those questions:
+
+1. Which news article attracted the most comments?
+
+2. What topic attracted the most comments?
+
+3. What is the overall sentiment of the comments towards that topic?
+
+4. How many comments referred to possible policy solutions towards that topic?
+
+5. What was the overall sentiment towards such policy solutions?
+
+
+Steps to do:
+
+A. Cleaning the article and comment datasets
+
+For article dataset 
+1. Remove the categories `Review` and `Questions` from `typeOfMaterial`, as the articles in those cateogries are not related to news.
+
+2. Remove `byline`, `documentType`, `multimedia`, `printPage`, `sectionName`, `source`
+
+3. Save cleaned version for future use
+
+For comments dataset
+
+1. Review comment dataset content
+
+2. Keep only variables `articleID`, `articleWordCount`, `commentBody`, `userLocation`, `typeOfMaterial`, `recommendations` and `replyCount`, which is considered relevant to analysis
+
+3. Store this cleaned comment dataset for future use
+
+Joing the article and comment datasets
+
+1. It seems there is a bunch of unknown headlines from the dataset, and as a group, they consituted the largest number of comments. For time purposes, an arbitary decision is made to only "fix" headlines that have over 500 comments. The headlines of the "unknown" can be found by referring to the URL of the articles. 
+
+2. Ten articles had their headlines "fixed". The remaining articles with unknown headlines are to be removed.
+
+3. Fix the special character errors in headline, which were apparently just "'",  "‘" , "..." and "‘" respectively.
+
+4. Save this cleaned dataset for future use.
+
+B. Data analysis part
+
+1. Find which articles had largest number of comments
+
+2. Break up article headlines into word "tokens", and removing popular but unmeaningful prepositions like "a", "an", "the",  in order to find which topics or subject elicted greatest number of reader comments. It was found articles that had the word "trump" in it had greatest number of reader comments.
+
+3. Break up article headlines into word "tokens" in pairs of two, and removing popular but unmeaningful prepositions like "a", "an", "the",  in order to find which topics or subject elicted greatest number of reader comments.
+
+4. ... no time to type out the remaining steps, but I hope I have documented them well in the steps below
+
+Setup: 
+
+```{r}
+library(tidyverse)
+```
+
+
+
+```{r}
+library(tidytext)
+```
+
+```{r}
+library(ggplot2)
+```
+
+```{r}
+library(ggthemes)
+```
+
+```{r}
+library(RColorBrewer)
+library(wordcloud)
+```
+
+```{r}
+library(sentimentr)
+```
+
+Cleaning data:
+
+```{r}
+NYT_article_March_2018 <-read.csv("ArticlesMarch2018.csv")
+```
+
+```{r}
+NYT_article_March_2018 %>% select(typeOfMaterial) %>% summary()
+```
+
+Remove the categories `Review`, `Questions` and `Obituary (Obit)` from `typeOfMaterial`, as the articles in those cateogries are not related to news.
+
+```{r}
+NYT_article_March_2018 %>% filter(typeOfMaterial!=c("Review", "Questions")) -> NYT_article_March_2018_clean
+```
+
+```{r}
+NYT_article_March_2018_clean %>% select(typeOfMaterial) %>% summary()
+```
+
+```{r}
+NYT_article_March_2018_clean %>% filter(typeOfMaterial!= c("Review", "Question")) -> NYT_article_March_2018_clean
+```
+
+```{r}
+NYT_article_March_2018_clean %>% select(typeOfMaterial) %>% summary()
+```
+
+```{r}
+NYT_article_March_2018_clean %>% filter(typeOfMaterial!= "Review") -> NYT_article_March_2018_clean
+```
+
+```{r}
+NYT_article_March_2018_clean %>% select(typeOfMaterial) %>% summary()
+```
+
+```{r}
+NYT_article_March_2018_clean %>% filter(typeOfMaterial!= "Obituary (Obit)") -> NYT_article_March_2018_clean
+NYT_article_March_2018_clean %>% filter(typeOfMaterial!= "Question") -> NYT_article_March_2018_clean
+```
+
+```{r}
+NYT_article_March_2018_clean %>% select(typeOfMaterial) %>% summary()
+```
+
+Remove variables `byline`, `documentType`, `multimedia`, `printPage`, `sectionName`, `source`
+```{r}
+NYT_article_March_2018_clean %>% select(-byline, -documentType, -multimedia, -printPage, -sectionName, -source) -> NYT_article_March_2018_clean
+```
+
+Store the cleaned data for NYT article for future use
+
+```{r}
+write_csv(NYT_article_March_2018_clean, "ArticlesMarch2018_clean.csv" )
+```
+
+```{r}
+NYT_comments_March_2018 <-read.csv("CommentsMarch2018.csv")
+```
+
+```{r}
+NYT_comments_March_2018 %>% summary()
+```
+
+After viewing NYT comment database, only decide to keep variables `articleID`, `articleWordCount`, `commentBody`, `userLocation`, `typeOfMaterial`, `recommendations` and `replyCount`, which is considered relevant to analysis
+
+```{r}
+NYT_comments_March_2018 %>% select(articleID, commentBody, userLocation, typeOfMaterial, recommendations, replyCount) -> NYT_comments_March_2018_clean
+```
+
+Store this cleaned comment dataset for future use
+```{r}
+write_csv(NYT_comments_March_2018_clean, "CommentsMarch2018_clean.csv" )
+```
+
+Next stage: Combining the article and comment dataset
+
+Combine the cleaned article and comment database, by joining `articleID`. Main purpose is to get the headlines from the article database and combine with the comments.
+
+```{r}
+NYT_article_March_2018_clean <-read.csv("ArticlesMarch2018_clean.csv")
+```
+
+```{r}
+NYT_comments_March_2018_clean <-read.csv("CommentsMarch2018_clean.csv")
+```
+
+```{r}
+NYT_article_March_2018_clean %>% left_join(NYT_comments_March_2018_clean, by = "articleID") -> NYT_March_2018_clean
+```
+
+
+
+```{r}
+NYT_March_2018_clean %>% group_by(headline) %>% summarise(number_of_comments = n()) %>% arrange(desc(number_of_comments))
+```
+
+It seems there is a bunch of unknown headlines from the dataset. 
+
+```{r}
+NYT_March_2018_clean %>% filter(headline=="Unknown") %>% group_by(articleID) %>% summarise(number_unknown_comment=n()) %>% arrange(desc(number_unknown_comment))
+```
+
+For time purposes, an arbitary decision is made to only "fix" headlines that have over 500 comments. The headlines of the "unknown" can be found by referring to the URL of the articles. 
+
+```{r}
+class(NYT_March_2018_clean$headline)
+```
+
+```{r}
+NYT_March_2018_clean$headline <-as.character(NYT_March_2018_clean$headline)
+```
+
+Fixing article with articleID: 5aa7c9c147de81a90120e141, which has headline "Trump Fires Rex Tillerson and Will Replace Him With C.I.A. Chief Pompeo"
+```{r}
+NYT_March_2018_clean$headline[NYT_March_2018_clean$articleID == "5aa7c9c147de81a90120e141"] <- "Trump Fires Rex Tillerson and Will Replace Him With C.I.A. Chief Pompeo"
+```
+
+Fixing article with articleID: 5ab6139947de81a901216850, which has headline "March for Our Lives Highlights: Students Protesting Guns Say ‘Enough Is Enough’"
+
+```{r}
+NYT_March_2018_clean$headline[NYT_March_2018_clean$articleID == "5ab6139947de81a901216850"] <- "March for Our Lives Highlights: Students Protesting Guns Say ‘Enough Is Enough’"
+```
+
+Fixing article with articleID: 5ab04eec47de81a901212e40, which has headline "Fifteen Years Ago, America Destroyed My Country"
+
+```{r}
+NYT_March_2018_clean$headline[NYT_March_2018_clean$articleID == "5ab04eec47de81a901212e40"] <- "Fifteen Years Ago, America Destroyed My Country"
+```
+
+Fixing article with articleID: 5aa1b27e47de81a90120bd64, which has headline "Krugman’s Taking Your Questions on Trade"
+
+```{r}
+NYT_March_2018_clean$headline[NYT_March_2018_clean$articleID == "5aa1b27e47de81a90120bd64"] <- "Krugman’s Taking Your Questions on Trade"
+```
+
+Fixing article with articleID: 5ab8eee047de81a901217422, which has headline "Trump and Western Allies Expel Scores of Russians in Sweeping Rebuke Over U.K. Poisoning"
+
+```{r}
+NYT_March_2018_clean$headline[NYT_March_2018_clean$articleID == "5ab8eee047de81a901217422"] <- "Trump and Western Allies Expel Scores of Russians in Sweeping Rebuke Over U.K. Poisoning"
+```
+
+Fixing article with articleID: 5aafec6147de81a901212a5c, which has headline "Trump Hires Lawyer Who Has Pushed Theory That Justice Dept. Framed the President"
+
+```{r}
+NYT_March_2018_clean$headline[NYT_March_2018_clean$articleID == "5aafec6147de81a901212a5c"] <- "Trump Hires Lawyer Who Has Pushed Theory That Justice Dept. Framed the President"
+```
+
+Fixing article with articleID: 5a995c17410cf7000162ee2f, which has headline "Trump Calls Trade Wars ‘Good’ and ‘Easy to Win’"
+
+```{r}
+NYT_March_2018_clean$headline[NYT_March_2018_clean$articleID == "5a995c17410cf7000162ee2f"] <- "Trump Calls Trade Wars ‘Good’ and ‘Easy to Win’"
+```
+
+Fixing article with articleID: 5a9d72fb410cf7000162f090, which has headline "Ryan Criticizes Tariff Plan as Trump Issues Nafta Threat’"
+
+```{r}
+NYT_March_2018_clean$headline[NYT_March_2018_clean$articleID == "5a9d72fb410cf7000162f090"] <- "Ryan Criticizes Tariff Plan as Trump Issues Nafta Threat’"
+```
+
+Fixing article with articleID: 5a9e7b9847de81a90120abaa, which has headline "North Korea Signals Willingness to ‘Denuclearize,’ South Says"
+
+```{r}
+NYT_March_2018_clean$headline[NYT_March_2018_clean$articleID == "5a9e7b9847de81a90120abaa"] <- "North Korea Signals Willingness to ‘Denuclearize,’ South Says"
+```
+
+Fixing article with articleID: 5aa9050947de81a90120f646, which has headline "Britain Expels 23 Russian Diplomats Over Ex-Spy’s Poisoning"
+
+```{r}
+NYT_March_2018_clean$headline[NYT_March_2018_clean$articleID == "5aa9050947de81a90120f646"] <- "Britain Expels 23 Russian Diplomats Over Ex-Spy’s Poisoning"
+```
+
+Testing if the wanted number of headlines of unknowns were "fixed", that is, there are now no unknown headlines with over 500 comments.
+
+```{r}
+NYT_March_2018_clean %>% filter(headline=="Unknown") %>% group_by(articleID) %>% summarise(number_unknown_comment=n()) %>% arrange(desc(number_unknown_comment))
+```
+
+Remove the remaining articles that had unknown headlines and their comments. The number of removed articles is 123, which is 9.35% of articles.
+
+```{r}
+NYT_March_2018_clean %>% filter(headline!="Unknown") -> NYT_March_2018_clean 
+```
+
+```{r}
+NYT_March_2018_clean %>% group_by(headline) %>% summarise(number_of_comments = n()) %>% arrange(desc(number_of_comments))
+```
+
+Try to fix the "â\200\231" errors in headline, which is apparently just "'". 
+
+```{r}
+NYT_March_2018_clean$headline <- gsub("â\200\231", "'", NYT_March_2018_clean$headline)
+```
+
+Try to fix the "Ã¢â‚¬â„¢" errors in headline, which is also just "'"
+
+```{r}
+NYT_March_2018_clean$headline <- gsub("Ã¢â‚¬â„¢", "'", NYT_March_2018_clean$headline)
+```
+
+```{r}
+NYT_March_2018_clean %>% group_by(headline) %>% summarise(number_of_comments = n()) %>% arrange(desc(number_of_comments))
+```
+
+
+
+Try to fix the "â\200\230" errors in headline, which is apparently just "‘". 
+
+```{r}
+NYT_March_2018_clean$headline <- gsub("â\200\230", "‘", NYT_March_2018_clean$headline)
+```
+
+Try to fix the "Ã¢â‚¬Ëœ" errors in headline, which is apparently just "‘" too.  
+
+```{r}
+NYT_March_2018_clean$headline <- gsub("Ã¢â‚¬Ëœ", "‘", NYT_March_2018_clean$headline)
+```
+
+```{r}
+NYT_March_2018_clean %>% group_by(headline) %>% summarise(number_of_comments = n()) %>% arrange(desc(number_of_comments))
+```
+
+Try to fix the "â\200¦" errors in headline, which is apparently just "...". 
+
+```{r}
+NYT_March_2018_clean$headline <- gsub("â\200¦", "...", NYT_March_2018_clean$headline)
+```
+
+
+Try to fix the "Ã¢â‚¬Â¦" errors in headline, which is also apparently just "..."
+
+```{r}
+NYT_March_2018_clean$headline <- gsub("Ã¢â‚¬Â¦", "...", NYT_March_2018_clean$headline)
+```
+
+```{r}
+NYT_March_2018_clean %>% group_by(headline) %>% summarise(number_of_comments = n()) %>% arrange(desc(number_of_comments))
+```
+
+Try to fix the "â€˜" errors in headline, which is just "‘"
+
+```{r}
+NYT_March_2018_clean$headline <- gsub("â€˜", "‘", NYT_March_2018_clean$headline)
+```
+
+Save this data-cleaned version of articles and comments for future use.
+
+```{r}
+write_csv(NYT_March_2018_clean, "March2018_clean.csv" )
+```
+
+Data anaylsing part:
+
+Reloading the saved March_2018_clean dataset
+
+```{r}
+NYT_March_2018_clean <-read.csv("March2018_clean.csv")
+```
+
+Change `headline` class to character
+```{r}
+NYT_March_2018_clean$headline <-as.character(NYT_March_2018_clean$headline)
+```
+
+Number of article headlines for analysis:
+
+```{r}
+length(unique(NYT_March_2018_clean$headline))
+```
+
+Plot the graph of which headlines had the most number of comments
+
+```{r}
+NYT_March_2018_clean %>% group_by(headline) %>% summarise(number_of_comments = n()) %>% arrange(desc(number_of_comments)) %>% slice(1:10)
+```
+
+```{r}
+NYT_March_2018_clean %>% 
+  group_by(headline) %>% 
+  summarise(number_of_comments = n()) %>% 
+  arrange(desc(number_of_comments)) %>% 
+  slice(1:10) %>% 
+  ggplot(mapping=aes(x=fct_reorder(headline, number_of_comments, .desc=FALSE), y=number_of_comments, fill=headline))+
+           geom_bar(stat="identity")+
+  theme_hc()+
+  labs(title = "Top ten headlines with most comments", y = "Number of comments", fill=FALSE)+ 
+  scale_x_discrete(labels = c("Trump Fires Rex Tillerson and Will Replace Him With C.I.A. Chief Pompeo" = "Trump Fires Rex Tillerson and Will Replace\nHim With C.I.A. Chief Pompeo", "Trump Chooses Hawk For 3rd Security Adviser As Shake-Up Continues" = "Trump Chooses Hawk For 3rd Security Adviser\nAs Shake-Up Continues", "Adult Film Star Feared for Safety Of Daughter After Trump Threat"="Adult Film Star Feared for Safety Of\nDaughter After Trump Threat"))+
+  theme(axis.title.y=element_blank())+
+  theme(legend.position = "none")+
+  coord_flip()
+```
+
+Can we do better and see what keywords in article headlines elict the greatest number of reader comments, which could suggest what topics or areas that readers have the most opinion on?
+
+First step is "tokenizing" the words in article headlines
+
+```{r}
+NYT_March_2018_clean %>% unnest_tokens(word, headline, drop=FALSE) -> NYT_March_2018_clean_headline_words
+```
+
+```{r}
+NYT_March_2018_clean_headline_words %>% group_by(word) %>% count(sort=TRUE)
+```
+
+Next step is removing commonly used words such as "a", "an", "the"
+
+```{r}
+NYT_March_2018_clean_headline_words %>% anti_join(stop_words) -> NYT_March_2018_clean_headline_words
+```
+
+```{r}
+NYT_March_2018_clean_headline_words %>% group_by(word) %>% count(sort=TRUE)
+```
+
+Filter out some meaningless code word
+
+```{r}
+unwanted_code_words <- c("â", "ã", "šâ", "ãƒâ", "žâ", "ãƒæ’ã", "šã")
+```
+
+It seems that the filter needs to run multiple times in order to truly remove the meaningless code words.
+
+```{r}
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+NYT_March_2018_clean_headline_words %>% filter(word!=unwanted_code_words) -> NYT_March_2018_clean_headline_words
+```
+
+```{r}
+NYT_March_2018_clean_headline_words %>% group_by(word) %>% count(sort=TRUE)
+```
+
+```{r}
+NYT_March_2018_clean_headline_words %>% 
+  group_by(word) %>% 
+  summarise(number_of_comments = n()) %>% 
+  arrange(desc(number_of_comments)) %>% 
+  slice(1:10) %>% 
+  ggplot(mapping=aes(x=fct_reorder(word, number_of_comments, .desc=FALSE), y=number_of_comments, fill=word))+
+           geom_bar(stat="identity")+
+  theme_hc()+
+  labs(title = "Top ten words in headlines with most comments", y = "Number of comments", fill=FALSE)+ 
+  theme(axis.title.y=element_blank())+
+  theme(legend.position = "none")+
+  coord_flip()
+```
+
+It can been seen that articles that had the word "trump" in it generated in total 44,627 comments.
+
+It can also be seen "trump" and "trump's" should be classified as the same subject. Similarly, "trade" and "tariffs" belong to same category.
+
+Moreover, perhaps we can gain a better understanding of the words in article headlines if we broke them up in pairs. 
+
+```{r}
+NYT_March_2018_clean %>% unnest_tokens(word, headline, token="ngrams", n=2, drop=FALSE) -> NYT_March_2018_clean_headline_bigrams
+```
+
+```{r}
+NYT_March_2018_clean_headline_bigrams %>% group_by(word) %>% count(sort=TRUE)
+```
+
+Again, we remove the commonly used words such as "a", "an", "the" from the "bigrams" version and do the analysis again. This involves separating the bigrams into two single words and filtering each.
+
+```{r}
+NYT_March_2018_clean_headline_bigrams %>% separate(word, c("word1", "word2", sep = " ", extra="drop")) -> sep_headline_bigrams
+```
+```{r}
+sep_headline_bigrams %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) -> sep_headline_bigrams_filtered
+```
+
+Reunite the separated words into one filtered bigram.
+
+```{r}
+sep_headline_bigrams_filtered %>% unite(bigram, word1, word2, sep = " ") -> NYT_March_2018_clean_headline_bigrams_filtered
+```
+
+```{r}
+NYT_March_2018_clean_headline_bigrams_filtered %>% group_by(bigram) %>% count(sort=TRUE)
+```
+
+```{r}
+NYT_March_2018_clean_headline_bigrams_filtered %>% 
+  group_by(bigram) %>% 
+  summarise(number_of_comments = n()) %>% 
+  arrange(desc(number_of_comments)) %>% 
+  slice(1:10) %>% 
+  ggplot(mapping=aes(x=fct_reorder(bigram, number_of_comments, .desc=FALSE), y=number_of_comments, fill=bigram))+
+           geom_bar(stat="identity")+
+  theme_hc()+
+  labs(title = "Top ten subjects in headlines with most comments", y = "Number of comments", fill=FALSE)+ 
+  theme(axis.title.y=element_blank())+
+  theme(legend.position = "none")+
+  coord_flip()
+```
+
+It can be seen that gun control, North Korea and trade war are the three main areas in March 2018 that attracted New York Times readers to give comments. 
+
+We now try to focus the analysis on the topic of gun control.
+
+First, filter the articles that are related to the topic of gun control, which is to say, what articles have the words "gun control" in their headlines.
+
+```{r}
+NYT_March_2018_clean_headline_bigrams_filtered %>% filter(bigram == "gun control") -> NYT_March_2018_gun_control
+```
+
+```{r}
+NYT_March_2018_gun_control %>% group_by(headline) %>% count(sort=TRUE)
+```
+
+We try to analyse people's opinion on the issue of gun controls.
+
+One way to do this is to analyse the content of the comments and pick up words that reflect sentiment.
+
+First, we try to fix the weird codes that appear in the words of comments.
+```{r}
+NYT_March_2018_gun_control$commentBody <- gsub("Ã¢â‚¬â„¢", "'", NYT_March_2018_gun_control$commentBody)
+NYT_March_2018_gun_control$commentBody <- gsub("Ã¢â‚¬Ëœ", "‘", NYT_March_2018_gun_control$commentBody)
+NYT_March_2018_gun_control$commentBody <- gsub("Ã¢â‚¬Â¦", "...", NYT_March_2018_gun_control$commentBody)
+NYT_March_2018_gun_control$commentBody <- gsub("â€˜", "‘", NYT_March_2018_gun_control$commentBody)
+```
+
+Then, we tokenize the comments
+
+```{r}
+as.character(NYT_March_2018_gun_control$commentBody) -> NYT_March_2018_gun_control$commentBody
+```
+
+```{r}
+NYT_March_2018_gun_control %>% unnest_tokens(word, commentBody, drop=FALSE) -> NYT_March_2018_gun_control_comment_words
+```
+
+
+Before analysing the sentiment of comments, we might explore the most commonly used words after ignoring the usual words "a", "an", "the" and the like.
+
+```{r}
+NYT_March_2018_gun_control_comment_words %>% 
+  anti_join(stop_words) %>% 
+  group_by(word) %>% 
+  count(sort=TRUE)
+```
+
+Again, we try to filter out the unwanted code words
+
+```{r}
+unwanted_code_words2 <- c("â", "ã", "šâ", "ãƒâ", "žâ", "ãƒæ’ã", "šã", "br")
+```
+
+```{r}
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+NYT_March_2018_gun_control_comment_words %>% filter(word!=unwanted_code_words2) -> NYT_March_2018_gun_control_comment_words
+```
+
+```{r}
+NYT_March_2018_gun_control_comment_words %>% 
+  anti_join(stop_words) %>% 
+  group_by(word) %>% 
+  count(sort=TRUE)
+```
+
+Forming a wordcloud of the frequency of words used, by top 100 words that appeared most frequently.
+
+```{r}
+NYT_March_2018_gun_control_comment_words %>% 
+  anti_join(stop_words) %>% 
+  group_by(word) %>% 
+  count() %>%
+  with(wordcloud(word, n, max=100))
+```
+
+This doesn't seem very helpful. 
+
+Another way would be to probe for specific recurring phrases in the comments that could indicate what is the public's opinion on gun control. Here, we look for phrases that consists of four words. 
+
+```{r}
+NYT_March_2018_gun_control %>% unnest_tokens(phrase, commentBody, token = "ngrams", n = 4, drop=FALSE) -> NYT_March_2018_gun_control_comment_phrases
+```
+
+```{r}
+NYT_March_2018_gun_control_comment_phrases %>% filter(str_detect(phrase, unwanted_code_words2, negate=TRUE )) -> NYT_March_2018_gun_control_comment_phrases
+NYT_March_2018_gun_control_comment_phrases %>% filter(str_detect(phrase, unwanted_code_words2, negate=TRUE )) -> NYT_March_2018_gun_control_comment_phrases
+NYT_March_2018_gun_control_comment_phrases %>% filter(str_detect(phrase, unwanted_code_words2, negate=TRUE )) -> NYT_March_2018_gun_control_comment_phrases
+NYT_March_2018_gun_control_comment_phrases %>% filter(str_detect(phrase, unwanted_code_words2, negate=TRUE )) -> NYT_March_2018_gun_control_comment_phrases
+NYT_March_2018_gun_control_comment_phrases %>% filter(str_detect(phrase, unwanted_code_words2, negate=TRUE )) -> NYT_March_2018_gun_control_comment_phrases
+NYT_March_2018_gun_control_comment_phrases %>% filter(str_detect(phrase, unwanted_code_words2, negate=TRUE )) -> NYT_March_2018_gun_control_comment_phrases
+NYT_March_2018_gun_control_comment_phrases %>% filter(str_detect(phrase, unwanted_code_words2, negate=TRUE )) -> NYT_March_2018_gun_control_comment_phrases
+NYT_March_2018_gun_control_comment_phrases %>% filter(str_detect(phrase, unwanted_code_words2, negate=TRUE )) -> NYT_March_2018_gun_control_comment_phrases
+NYT_March_2018_gun_control_comment_phrases %>% filter(str_detect(phrase, unwanted_code_words2, negate=TRUE )) -> NYT_March_2018_gun_control_comment_phrases
+NYT_March_2018_gun_control_comment_phrases %>% filter(str_detect(phrase, unwanted_code_words2, negate=TRUE )) -> NYT_March_2018_gun_control_comment_phrases
+NYT_March_2018_gun_control_comment_phrases %>% filter(str_detect(phrase, unwanted_code_words2, negate=TRUE )) -> NYT_March_2018_gun_control_comment_phrases
+```
+
+```{r}
+NYT_March_2018_gun_control_comment_phrases %>% 
+  group_by(phrase) %>% 
+  count(sort=TRUE)
+```
+
+```{r}
+NYT_March_2018_gun_control_comment_phrases %>% 
+  group_by(phrase) %>% 
+  summarise(number_of_comments = n()) %>% 
+  arrange(desc(number_of_comments)) %>% 
+  slice(1:10) %>% 
+  ggplot(mapping=aes(x=fct_reorder(phrase, number_of_comments, .desc=FALSE), y=number_of_comments, fill=phrase))+
+           geom_bar(stat="identity")+
+  theme_hc()+
+  labs(title = "Top ten phrases in comments", y = "Number of comments to appear in", fill=FALSE)+ 
+  theme(axis.title.y=element_blank())+
+  theme(legend.position = "none")+
+  coord_flip()
+```
+
+We can inspect those comments containing the phrase "afraid of the nra" or "money from the nra" if we want to have a deeper understanding of those comments.
+
+```{r}
+NYT_March_2018_gun_control %>% filter(str_detect(commentBody, "afraid of the nra|afraid of the NRA|afraid of the N.R.A."))%>%select(commentBody) %>% print()
+```
+
+```{r}
+NYT_March_2018_gun_control %>% filter(str_detect(commentBody, "money from the nra|money from the NRA|money from the N.R.A."))%>%select(commentBody) %>% print()
+```
+
+Apart from analysing the content of text, we can analyse the sentiment in the text.
+
+We refer again to individual words in the comments of articles that has "gun control" in their headlines, and use NRC Word-Emotion Association Lexicon, which requires citation as requested by their author, in order to analyse the sentiment of the words:
+
+This dataset was published in Saif M. Mohammad and Peter Turney. (2013), ``Crowdsourcing a Word-Emotion Association Lexicon.'' Computational Intelligence, 29(3): 436-465.
+
+article{mohammad13,
+author = {Mohammad, Saif M. and Turney, Peter D.},
+title = {Crowdsourcing a Word-Emotion Association Lexicon},
+journal = {Computational Intelligence},
+volume = {29},
+number = {3},
+pages = {436-465},
+doi = {10.1111/j.1467-8640.2012.00460.x},
+url = {https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1467-8640.2012.00460.x},
+eprint = {https://onlinelibrary.wiley.com/doi/pdf/10.1111/j.1467-8640.2012.00460.x},
+year = {2013}
+}
+
+```{r}
+nrc_sentiment <- get_sentiments("nrc")
+```
+
+```{r}
+NYT_March_2018_gun_control_comment_words %>% inner_join(nrc_sentiment) -> NYT_March_2018_gun_control_comment_words_sentiment
+```
+
+Fixing the strange code errors in headline
+
+```{r}
+NYT_March_2018_gun_control_comment_words_sentiment$headline <- gsub("â€˜", "‘", NYT_March_2018_gun_control_comment_words_sentiment$headline)
+```
+
+
+```{r}
+NYT_March_2018_gun_control_comment_words_sentiment %>% group_by(headline) %>% count(sentiment)
+```
+
+```{r}
+NYT_March_2018_gun_control_comment_words_sentiment %>% group_by(headline) %>% count(sentiment) %>% 
+  ggplot(mapping=aes(x=sentiment, y=n, colour=sentiment))+geom_point()+
+  facet_wrap(~ fct_reorder(headline, n, .desc=TRUE), ncol=2, scales="free_y" )+
+  labs(x="Sentiment", y ="Number of words expressing that sentiment", colour=FALSE, caption = "Sentiment analysis used with NRC Word-Emotion Association Lexicon published in Saif M. Mohammad and Peter Turney. (2013), ``Crowdsourcing a Word-Emotion Association Lexicon.'' Computational Intelligence, 29(3): 436-465")+
+  theme_hc()+
+  theme(legend.position = "none")
+```
+
+How do people who leave comments feel about certain possible gun control policies?
+
+```{r}
+NYT_March_2018_gun_control %>% unnest_tokens(sentence, commentBody, token = "sentences", drop = FALSE) -> NYT_March_2018_gun_control_sentence
+```
+
+Policy: ban assault weapons
+
+```{r}
+NYT_March_2018_gun_control_sentence %>% group_by(sentence) %>% filter(str_detect(sentence, "ban|banning")&str_detect(sentence, "assault|weapons|rifles"))%>%count()
+```
+
+There were 122 sentences out of 13,040 sentences of comments that had a high chance of mentioning an assualt weapon ban.
+
+```{r}
+NYT_March_2018_gun_control_sentence %>% group_by(sentence) %>% filter(str_detect(sentence, "ban|banning")&str_detect(sentence, "assault|weapons|rifles")) -> NYT_March_2018_gun_control_ban_assault_sentence
+```
+
+
+Checking the emotions of comments towards an assualt weapon ban using SentimentR. A negative value indicates negative sentiment, while a positive value indicates positive sentiment.
+
+```{r}
+NYT_March_2018_gun_control %>% mutate(sentence = get_sentences(NYT_March_2018_gun_control$commentBody)) -> NYT_March_2018_gun_control_ban_assault_emotion
+```
+
+```{r}
+NYT_March_2018_gun_control_ban_assault_emotion %>% filter(str_detect(sentence, "ban|banning")&str_detect(sentence, "assault|weapons|rifles")) -> NYT_March_2018_gun_control_ban_assault_emotion
+```
+
+Trying out different ways to do so.
+
+```{r}
+NYT_March_2018_gun_control$commentBody %>% get_sentences() %>% sentiment() -> test_a
+```
+
+```{r}
+NYT_March_2018_gun_control_ban_assault_sentence$sentence %>% sentiment() -> test_b
+```
+
+```{r}
+NYT_March_2018_gun_control_ban_assault_sentence$sentence %>% sentiment_by() -> ban_assault_sentiment
+```
+
+```{r}
+NYT_March_2018_gun_control %>% filter(str_detect(commentBody, "ban|banning")&str_detect(commentBody, "assault|weapons|rifles")) -> test_d
+```
+
+```{r}
+test_d$commentBody %>% get_sentences() %>% sentiment() -> test_dEmotions
+```
+
+```{r}
+test_d$commentBody %>% sentiment() -> test_dEmotionsB
+```
+
+Using the dataset test_c, the average sentiment towards banning assault weapons is:
+
+```{r}
+ban_assault_sentiment %>% summarise(mean(ave_sentiment))
+```
+
+The average sentiment is -0.2202422, which represents the sentences mentioning the words banning assault weapons or rifles have on average a negative sentiment.
+
+```{r}
+ban_assault_sentiment %>% ggplot(aes(x=ave_sentiment, y=element_id))+
+geom_point()+  
+  geom_vline(xintercept= 0)+
+  theme(axis.text.y=element_blank())+
+  theme_hc()+
+  labs(x="The overall sentiment of each sentence", y="", title = "Sentiment towards assault weapon ban")
+```
+
+It seems there is no good way to test for sentiments towards banning assault weapons. Looking at the datasets, the overall sentiment tends to be negative, but there is no good way to interpret this finding. Plus it could be possible the words banning and assualt carry negative meanings themselves and affected the sentiment scores.
+
+
+Policy: Background checks
+
+Checking for comments on background checks
+
+```{r}
+NYT_March_2018_gun_control_sentence %>% group_by(sentence) %>% filter(str_detect(sentence, "background")&str_detect(sentence, "check|checks|checking")) -> NYT_March_2018_gun_control_background_check_sentence
+```
+
+There were 108 sentences out of 13,040 sentences of comments that had a high chance of mentioning background checks.
+
+Checking the emotions of comments towards background checks using SentimentR. A negative value indicates negative sentiment, while a positive value indicates positive sentiment.
+
+```{r}
+NYT_March_2018_gun_control_background_check_sentence$sentence %>% sentiment_by() -> background_check_sentiment
+```
+
+The average sentiment towards background_check
+
+```{r}
+background_check_sentiment %>% summarise(mean(ave_sentiment))
+```
+
+The average sentiment is -0.0215352, which represents the sentences mentioning the words background checks have on average a slightly negative sentiment.
+
+
+```{r}
+background_check_sentiment %>% ggplot(aes(x=ave_sentiment, y=element_id))+
+  geom_point()+
+  geom_vline(xintercept= 0)+
+  theme(axis.text.y=element_blank())+
+  theme_hc()+
+  labs(x="The overall sentiment of each sentence", y="", title = "Sentiment towards background checks")
+```
+
+
+
+Unused chart, as was found not able to show the points of zero
+
+```{r}
+background_check_sentiment %>% ggplot(aes(x=ave_sentiment, y=element_id))+
+  geom_point(mapping=aes(x= ifelse(ave_sentiment >0, ave_sentiment, 0)), colour = "green")+
+  geom_point(mapping=aes(x= ifelse(ave_sentiment <0, ave_sentiment, 0)), colour = "red")+
+  geom_point(mapping=aes(x= ifelse(ave_sentiment ==0, ave_sentiment, 0)), colour = "black")+
+  theme(axis.text.y=element_blank())+
+  theme_hc()+
+  labs(x="The overall sentiment of each sentence", y="", title = "Sentiment towards background checks")
+```
+```
+
